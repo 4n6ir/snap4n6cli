@@ -1,5 +1,8 @@
 import argparse
 import boto3
+import hashlib
+import io
+import os
 import sys
 from snap4n6 import __version__
 
@@ -33,10 +36,47 @@ def gets3bucket(region):
 		print('Missing SSM Parameter --> is \'/snap4n6/s3/bucket\' deployed in '+region+'\n')
 		sys.exit(1)
 		pass
+	
+def getverification(snapid, sha256):
+	sha256_hash = hashlib.sha256()
+	with io.FileIO(snapid+'.tmp', 'rb') as f:
+		for b in f:
+			sha256_hash.update(b)
+		f.close()
+	if sha256_hash.hexdigest() != sha256:
+		return 'ERROR'
+	else:
+		return 'SUCCESS'
 
-def rebuild(region, snapid, ext4, status):
+def rebuild(region, snapid, ext4):
 	bucket = gets3bucket(region)
-	imagesize = getimagesize(bucket, snapid)
+	size = getimagesize(bucket, snapid)
+	os.system('dd if=/dev/zero of='+snapid+'.dd bs=1 count=0 seek='+size+'G')
+	if ext4 == True:
+		os.system('echo y | mkfs.ext4 '+snapid+'.dd')
+	log = open(snapid+'.log', 'w')
+	with io.FileIO(snapid+'.dd', 'r+b') as image:
+		s3_client = boto3.client('s3')
+		paginator = s3_client.get_paginator('list_objects_v2')
+		response_iterator = paginator.paginate(Bucket = bucket)
+		for page in response_iterator:
+			for content in page['Contents']:
+				output = content['Key'].split('/')
+				value = output[1].split('_')
+				s3_client.download_file(bucket, content['Key'], snapid+'.tmp')
+				result = getverification(snapid, value[2])
+				if result == 'ERROR':
+					log.write(result+'\t'+output[1]+'\n')
+				else:
+					location = int(value[0]) * int(value[4])
+					image.seek(location)
+					with io.FileIO(snapid+'.tmp', 'rb') as block:
+						for byte in block:
+							image.write(byte)
+					block.close()
+	image.close()
+	log.close()
+	os.system('rm '+snapid+'.tmp')
 
 def main():
 	parser = argparse.ArgumentParser(description='Snap4n6 v'+__version__)
@@ -45,13 +85,11 @@ def main():
 	required.add_argument('--snapid', type=str, help='snap-0f3e60199f11889da', required=True)
 	optional = parser.add_argument_group('Optional')
 	optional.add_argument('--ext4', action='store_true', help='Rebuild EXT4 File System')
-	optional.add_argument('--status', action='store_true', help='Status of Image Rebuild')
 	args = parser.parse_args()
 	
 	print('\nSnap4n6 v'+__version__+'\n')
 	print('Region: \t'+args.region)
 	print('Snapshot: \t'+args.snapid)
-	print('Ext4 Fs: \t'+str(args.ext4))
-	print('Status: \t'+str(args.status)+'\n')
+	print('Ext4 Fs: \t'+str(args.ext4)+'\n')
 
-	rebuild(args.region, args.snapid, args.ext4, args.status)
+	rebuild(args.region, args.snapid, args.ext4)
