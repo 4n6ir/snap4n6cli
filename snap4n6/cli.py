@@ -4,11 +4,22 @@ import hashlib
 import io
 import os
 import sys
+from tqdm import tqdm
 from snap4n6 import __version__
+
+s3_client = boto3.client('s3')
+
+def getblocklist(bucket):
+	blocks = []
+	paginator = s3_client.get_paginator('list_objects_v2')
+	response_iterator = paginator.paginate(Bucket = bucket)
+	for page in response_iterator:
+		for content in page['Contents']:
+			blocks.append(content['Key'])
+	return blocks
 
 def getimagesize(bucket, snapid):
 	try:
-		s3_client = boto3.client('s3')
 		response = s3_client.list_objects_v2(
 			Bucket = bucket,
 			MaxKeys = 1,
@@ -55,28 +66,28 @@ def rebuild(region, snapid, ext4):
 	if ext4 == True:
 		os.system('echo y | mkfs.ext4 '+snapid+'.dd')
 	log = open(snapid+'.log', 'w')
+	blocks = getblocklist(bucket)
 	with io.FileIO(snapid+'.dd', 'r+b') as image:
-		s3_client = boto3.client('s3')
-		paginator = s3_client.get_paginator('list_objects_v2')
-		response_iterator = paginator.paginate(Bucket = bucket)
-		for page in response_iterator:
-			for content in page['Contents']:
-				output = content['Key'].split('/')
-				value = output[1].split('_')
-				s3_client.download_file(bucket, content['Key'], snapid+'.tmp')
-				result = getverification(snapid, value[2])
-				if result == 'ERROR':
-					log.write(result+'\t'+output[1]+'\n')
-				else:
-					location = int(value[0]) * int(value[4])
-					image.seek(location)
-					with io.FileIO(snapid+'.tmp', 'rb') as block:
-						for byte in block:
-							image.write(byte)
-					block.close()
+		for block in tqdm(blocks):
+			output = block.split('/')
+			value = output[1].split('_')
+			s3_client.download_file(bucket, block, snapid+'.tmp')
+			result = getverification(snapid, value[2])
+			if result == 'ERROR':
+				log.write(result+'\t'+output[1]+'\n')
+			else:
+				location = int(value[0]) * int(value[4])
+				image.seek(location)
+				with io.FileIO(snapid+'.tmp', 'rb') as block:
+					for byte in block:
+						image.write(byte)
+				block.close()
 	image.close()
 	log.close()
-	os.system('rm '+snapid+'.tmp')
+	try:
+		os.system('rm '+snapid+'.tmp')
+	except:
+		pass
 
 def main():
 	parser = argparse.ArgumentParser(description='Snap4n6 v'+__version__)
