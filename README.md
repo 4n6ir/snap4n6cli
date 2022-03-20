@@ -33,7 +33,9 @@ Optional:
 
 ### Command
 
-Microsoft Windows Snapshots contain the NTFS File System necessary to rebuild a forensic image.  However, Linux Snapshots require the creation of  Superblocks for the EXT4 File System using: ```mkfs.ext4```
+Microsoft Windows Snapshots contain the NTFS File System necessary to rebuild a forensic image.  
+
+Linux Snapshots require the creation of Superblocks for the EXT4 File System using: ```mkfs.ext4```
 
 ```
 snap4n6 --region us-east-2 --snapid snap-0f3e60199f11889da --ext4
