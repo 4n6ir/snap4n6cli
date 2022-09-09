@@ -85,3 +85,7 @@ Writing superblocks and filesystem accounting information: done
 ```
 $ python setup.py install --user
 ```
+
+### Alternative
+
+- coldsnap - https://github.com/awslabs/coldsnap
