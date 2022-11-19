@@ -86,6 +86,7 @@ Writing superblocks and filesystem accounting information: done
 $ python setup.py install --user
 ```
 
-### Alternative
+### Alternatives
 
+- aws-snap-io - https://github.com/forensicmatt/aws-snap-io
 - coldsnap - https://github.com/awslabs/coldsnap
